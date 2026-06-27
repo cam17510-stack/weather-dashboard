@@ -37,39 +37,60 @@ async def get_weather(lat: float, lon: float):
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "temperature_2m,relative_humidity_2m,weather_code",
+        "hourly": "temperature_2m,relative_humidity_2m,weather_code,precipitation_probability,precipitation,wind_speed_10m",
+        "daily": "temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum",
         "timezone": "Asia/Tokyo",
-        "forecast_days": 2,
+        "forecast_days": 7,
     }
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await fetch_with_retry(client, url, params=params)
             data = response.json()
     except Exception as e:
-        return JSONResponse(
-            status_code=502,
-            content={"error": str(e)},
-        )
+        return JSONResponse(status_code=502, content={"error": str(e)})
 
     hourly = data.get("hourly", {})
     times = hourly.get("time", [])
     temps = hourly.get("temperature_2m", [])
     humidities = hourly.get("relative_humidity_2m", [])
     weather_codes = hourly.get("weather_code", [])
+    precip_probs = hourly.get("precipitation_probability", [])
+    precips = hourly.get("precipitation", [])
+    winds = hourly.get("wind_speed_10m", [])
 
-    formatted = []
+    hourly_data = []
     for i in range(len(times)):
         dt = times[i]
         month = int(dt[5:7])
         day = int(dt[8:10])
         hour = dt[11:13]
-        formatted.append({
+        hourly_data.append({
             "time": f"{month}/{day} {hour}時",
             "temperature": temps[i],
             "humidity": humidities[i],
             "weatherCode": weather_codes[i],
+            "precipProbability": precip_probs[i] if i < len(precip_probs) else None,
+            "precipitation": precips[i] if i < len(precips) else None,
+            "windSpeed": winds[i] if i < len(winds) else None,
         })
-    return {"forecast": formatted}
+
+    daily = data.get("daily", {})
+    daily_times = daily.get("time", [])
+    daily_data = []
+    for i in range(len(daily_times)):
+        dt = daily_times[i]
+        month = int(dt[5:7])
+        day = int(dt[8:10])
+        daily_data.append({
+            "date": f"{month}/{day}",
+            "tempMax": daily.get("temperature_2m_max", [])[i],
+            "tempMin": daily.get("temperature_2m_min", [])[i],
+            "weatherCode": daily.get("weather_code", [])[i],
+            "precipProbMax": daily.get("precipitation_probability_max", [])[i],
+            "precipSum": daily.get("precipitation_sum", [])[i],
+        })
+
+    return {"forecast": hourly_data, "daily": daily_data}
 
 
 @app.get("/api/zipcode")
