@@ -19,7 +19,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-const API = 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const REGIONS = [
   { code: '130000', name: '東京', lat: 35.6895, lon: 139.6917 },
