@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import httpx
 
 app = FastAPI()
@@ -24,10 +25,16 @@ async def get_weather(lat: float, lon: float):
         "timezone": "Asia/Tokyo",
         "forecast_days": 2,
     }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+    except Exception as e:
+        return JSONResponse(
+            status_code=502,
+            content={"error": f"Open-Meteo API error: {str(e)}"},
+        )
 
     hourly = data.get("hourly", {})
     times = hourly.get("time", [])
@@ -52,7 +59,7 @@ async def get_weather(lat: float, lon: float):
 
 @app.get("/api/zipcode")
 async def search_zipcode(code: str):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         res = await client.get(
             "https://zipcloud.ibsnet.co.jp/api/search",
             params={"zipcode": code},
@@ -62,7 +69,7 @@ async def search_zipcode(code: str):
 
 @app.get("/api/geocode")
 async def geocode(q: str):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         res = await client.get(
             "https://nominatim.openstreetmap.org/search",
             params={"q": q, "format": "json", "countrycodes": "jp", "limit": 1},
@@ -73,7 +80,7 @@ async def geocode(q: str):
 
 @app.get("/api/reverse-geocode")
 async def reverse_geocode(lat: float, lon: float):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         res = await client.get(
             "https://nominatim.openstreetmap.org/reverse",
             params={
