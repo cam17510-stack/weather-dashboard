@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar,
-  Tooltip, ResponsiveContainer, Legend, ReferenceLine, Area, ComposedChart
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Bar,
+  Tooltip, ResponsiveContainer, Legend, ReferenceLine, ComposedChart
 } from 'recharts';
 import {
-  MapPin, Thermometer, Droplets, Search, Wind,
+  MapPin, Thermometer, Droplets, Search, Wind, Calendar,
   Sun, Cloud, CloudRain, CloudSnow,
-  CloudLightning, CloudDrizzle, CloudFog, Umbrella
+  CloudLightning, CloudDrizzle, CloudFog, Umbrella, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -30,6 +30,15 @@ const REGIONS = [
 ];
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+
+function toDateKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function toAPIDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 function getWeatherInfo(code) {
   if (code === 0) return { desc: '快晴',      icon: Sun,            color: 'text-yellow-500', bg: 'bg-yellow-50' };
@@ -48,17 +57,104 @@ function nowLabel() {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}時`;
 }
 
-function getDayLabel(dateStr) {
+function getDayLabel(dateStr, startDate) {
   const [m, d] = dateStr.split('/').map(Number);
-  const now = new Date();
-  const target = new Date(now.getFullYear(), m - 1, d);
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(startDate.getFullYear(), m - 1, d);
+  const today = new Date();
+  today.setHours(0,0,0,0);
   const diff = Math.round((target - today) / 86400000);
   const wd = WEEKDAYS[target.getDay()];
   if (diff === 0) return `今日(${wd})`;
   if (diff === 1) return `明日(${wd})`;
-  if (diff === 2) return `明後日(${wd})`;
   return `${m}/${d}(${wd})`;
+}
+
+function MonthCalendar({ year, month, selectedDate, today, minDate, maxDate, onSelect }) {
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayKey = toDateKey(today);
+  const selectedKey = toDateKey(selectedDate);
+
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <div className="flex-1 min-w-0">
+      <p className="text-center text-sm font-bold text-gray-700 mb-2">{year}年 {MONTH_NAMES[month]}</p>
+      <div className="grid grid-cols-7 gap-0.5 text-center">
+        {WEEKDAYS.map((wd, i) => (
+          <div key={wd} className={`text-xs font-medium py-1 ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-gray-400'}`}>{wd}</div>
+        ))}
+        {cells.map((day, i) => {
+          if (day === null) return <div key={`e${i}`} />;
+          const date = new Date(year, month, day);
+          const key = toDateKey(date);
+          const isToday = key === todayKey;
+          const isSelected = key === selectedKey;
+          const isDisabled = date < minDate || date > maxDate;
+          const dow = date.getDay();
+          let cls = 'text-xs py-1 rounded-lg cursor-pointer transition-all ';
+          if (isSelected) cls += 'bg-blue-500 text-white font-bold shadow-md ';
+          else if (isToday) cls += 'bg-orange-100 text-orange-700 font-bold border border-orange-300 ';
+          else if (isDisabled) cls += 'text-gray-300 cursor-default ';
+          else if (dow === 0) cls += 'text-red-500 hover:bg-red-50 ';
+          else if (dow === 6) cls += 'text-blue-500 hover:bg-blue-50 ';
+          else cls += 'text-gray-700 hover:bg-gray-100 ';
+          return (
+            <div key={key} className={cls}
+              onClick={() => !isDisabled && onSelect(date)}>
+              {day}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ThreeMonthCalendar({ selectedDate, onSelect }) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const minDate = new Date(today);
+  minDate.setDate(minDate.getDate() - 92);
+  const maxDate = new Date(today);
+  maxDate.setDate(maxDate.getDate() + 9);
+
+  const [centerMonth, setCenterMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
+
+  const prevMonth = new Date(centerMonth.getFullYear(), centerMonth.getMonth() - 1, 1);
+  const nextMonth = new Date(centerMonth.getFullYear(), centerMonth.getMonth() + 1, 1);
+
+  const goBack = () => setCenterMonth(new Date(centerMonth.getFullYear(), centerMonth.getMonth() - 1, 1));
+  const goForward = () => setCenterMonth(new Date(centerMonth.getFullYear(), centerMonth.getMonth() + 1, 1));
+  const goToday = () => {
+    setCenterMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    onSelect(today);
+  };
+
+  return (
+    <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-5 shadow-xl border border-white/60">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+          <Calendar className="text-blue-500 w-5 h-5" />起点日を選択
+        </h2>
+        <div className="flex items-center gap-2">
+          <button onClick={goBack} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><ChevronLeft className="w-4 h-4" /></button>
+          <button onClick={goToday} className="text-xs bg-blue-50 text-blue-600 font-semibold px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors">今日</button>
+          <button onClick={goForward} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+      </div>
+      <div className="flex gap-4">
+        <MonthCalendar year={prevMonth.getFullYear()} month={prevMonth.getMonth()} selectedDate={selectedDate} today={today} minDate={minDate} maxDate={maxDate} onSelect={onSelect} />
+        <MonthCalendar year={centerMonth.getFullYear()} month={centerMonth.getMonth()} selectedDate={selectedDate} today={today} minDate={minDate} maxDate={maxDate} onSelect={onSelect} />
+        <MonthCalendar year={nextMonth.getFullYear()} month={nextMonth.getMonth()} selectedDate={selectedDate} today={today} minDate={minDate} maxDate={maxDate} onSelect={onSelect} />
+      </div>
+      <p className="text-xs text-gray-400 mt-2 text-center">
+        選択中: {selectedDate.getFullYear()}年{selectedDate.getMonth()+1}月{selectedDate.getDate()}日 から7日間を表示
+      </p>
+    </div>
+  );
 }
 
 function MapEvents({ onClick }) {
@@ -84,14 +180,13 @@ export default function App() {
   const [loading, setLoading]               = useState(false);
   const [error, setError]                   = useState(null);
   const [currentTime, setCurrentTime]       = useState(nowLabel());
+  const [startDate, setStartDate]           = useState(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
 
-  useEffect(() => { fetchWeather(); }, [lat, lon]);
+  const isToday = toDateKey(startDate) === toDateKey(new Date());
 
-  const fetchWeatherDirect = async () => {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,weather_code,precipitation_probability,precipitation,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max,precipitation_sum&timezone=Asia/Tokyo&forecast_days=7`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+  useEffect(() => { fetchWeather(); }, [lat, lon, startDate]);
+
+  const parseResponse = (data) => {
     const h = data.hourly || {};
     const times = h.time || [];
     const hourly = times.map((t, i) => ({
@@ -116,12 +211,50 @@ export default function App() {
     return { hourly, daily };
   };
 
+  const fetchWeatherDirect = async () => {
+    const sd = toAPIDate(startDate);
+    const ed = new Date(startDate);
+    ed.setDate(ed.getDate() + 6);
+    const edStr = toAPIDate(ed);
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const hourlyBase = 'temperature_2m,relative_humidity_2m,weather_code,precipitation,wind_speed_10m';
+    const dailyBase = 'temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum';
+    let merged = null;
+
+    if (startDate < today) {
+      const archiveEnd = ed < today ? edStr : toAPIDate(new Date(today.getTime() - 86400000));
+      const aRes = await fetch(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&hourly=${hourlyBase}&daily=${dailyBase}&timezone=Asia/Tokyo&start_date=${sd}&end_date=${archiveEnd}`);
+      if (aRes.ok) merged = await aRes.json();
+    }
+
+    if (ed >= today) {
+      const fStart = startDate >= today ? sd : toAPIDate(today);
+      const fRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=${hourlyBase},precipitation_probability&daily=${dailyBase},precipitation_probability_max&timezone=Asia/Tokyo&start_date=${fStart}&end_date=${edStr}`);
+      if (!fRes.ok) throw new Error(`HTTP ${fRes.status}`);
+      const fData = await fRes.json();
+      if (merged) {
+        for (const key of Object.keys(merged.hourly || {})) {
+          if (fData.hourly?.[key]) merged.hourly[key] = merged.hourly[key].concat(fData.hourly[key]);
+        }
+        for (const key of Object.keys(merged.daily || {})) {
+          if (fData.daily?.[key]) merged.daily[key] = merged.daily[key].concat(fData.daily[key]);
+        }
+      } else {
+        merged = fData;
+      }
+    }
+
+    return parseResponse(merged || {});
+  };
+
   const fetchWeather = async () => {
     setLoading(true);
     setError(null);
     setCurrentTime(nowLabel());
+    const dateParam = isToday ? '' : `&start_date=${toAPIDate(startDate)}`;
     try {
-      const res = await fetch(`${API}/api/weather?lat=${lat}&lon=${lon}`);
+      const res = await fetch(`${API}/api/weather?lat=${lat}&lon=${lon}${dateParam}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data.forecast && data.forecast.length > 0) {
@@ -195,7 +328,7 @@ export default function App() {
   };
 
   const currentHour = new Date().getHours();
-  const current = weatherData.length > 0 ? weatherData[Math.min(currentHour, weatherData.length - 1)] : null;
+  const current = (weatherData.length > 0 && isToday) ? weatherData[Math.min(currentHour, weatherData.length - 1)] : null;
   const info = current ? getWeatherInfo(current.weatherCode) : null;
   const Icon = info?.icon;
 
@@ -244,7 +377,10 @@ export default function App() {
 
         {error && <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-red-700 text-sm">{error}</div>}
 
-        {/* ===== 現在の天気 ===== */}
+        {/* ===== カレンダー ===== */}
+        <ThreeMonthCalendar selectedDate={startDate} onSelect={setStartDate} />
+
+        {/* ===== 現在の天気（今日が起点の場合のみ） ===== */}
         {current && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-white/80 backdrop-blur-lg rounded-2xl p-5 shadow-lg border border-white/60 flex items-center gap-3">
@@ -288,7 +424,7 @@ export default function App() {
                 const WIcon = w.icon;
                 return (
                   <div key={i} className={`rounded-xl p-3 text-center space-y-1 ${i === 0 ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50'}`}>
-                    <p className={`text-xs font-semibold ${i === 0 ? 'text-blue-600' : 'text-gray-600'}`}>{getDayLabel(d.date)}</p>
+                    <p className={`text-xs font-semibold ${i === 0 ? 'text-blue-600' : 'text-gray-600'}`}>{getDayLabel(d.date, startDate)}</p>
                     <WIcon className={`w-7 h-7 mx-auto ${w.color}`} />
                     <p className="text-xs text-gray-500">{w.desc}</p>
                     <div className="flex justify-center gap-1 text-sm">
@@ -325,8 +461,8 @@ export default function App() {
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} domain={[0, 100]} label={{ value: '湿度(%)', angle: 90, position: 'insideRight', style: { fontSize: 11 } }} />
                   <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }} />
                   <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <ReferenceLine x={currentTime} stroke="#ef4444" strokeWidth={2} strokeDasharray="5 3"
-                    label={{ value: '現在', position: 'top', fill: '#ef4444', fontSize: 10, fontWeight: 'bold' }} yAxisId="left" />
+                  {isToday && <ReferenceLine x={currentTime} stroke="#ef4444" strokeWidth={2} strokeDasharray="5 3"
+                    label={{ value: '現在', position: 'top', fill: '#ef4444', fontSize: 10, fontWeight: 'bold' }} yAxisId="left" />}
                   <Line yAxisId="left" type="monotone" dataKey="temperature" name="気温(℃)" stroke="#f97316" strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
                   <Line yAxisId="right" type="monotone" dataKey="humidity" name="湿度(%)" stroke="#22c55e" strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
                 </LineChart>
@@ -348,7 +484,7 @@ export default function App() {
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} label={{ value: 'mm', angle: 90, position: 'insideRight', style: { fontSize: 11 } }} />
                   <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }} />
                   <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <ReferenceLine x={currentTime} stroke="#ef4444" strokeWidth={2} strokeDasharray="5 3" yAxisId="left" />
+                  {isToday && <ReferenceLine x={currentTime} stroke="#ef4444" strokeWidth={2} strokeDasharray="5 3" yAxisId="left" />}
                   <Line yAxisId="left" type="monotone" dataKey="precipProbability" name="降水確率(%)" stroke="#3b82f6" strokeWidth={2} dot={false} />
                   <Bar yAxisId="right" dataKey="precipitation" name="降水量(mm)" fill="#93c5fd" opacity={0.6} />
                 </ComposedChart>
