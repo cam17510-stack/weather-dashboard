@@ -71,6 +71,21 @@ export default function App() {
 
   useEffect(() => { fetchWeather(); }, [lat, lon]);
 
+  const fetchWeatherDirect = async () => {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,weather_code&timezone=Asia/Tokyo&forecast_days=2`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const h = data.hourly || {};
+    const times = h.time || [];
+    return times.map((t, i) => ({
+      time: `${parseInt(t.substring(5,7))}/${t.substring(8,10)} ${t.substring(11,13)}時`,
+      temperature: h.temperature_2m[i],
+      humidity: h.relative_humidity_2m[i],
+      weatherCode: h.weather_code[i],
+    }));
+  };
+
   const fetchWeather = async () => {
     setLoading(true);
     setError(null);
@@ -79,9 +94,17 @@ export default function App() {
       const res = await fetch(`${API}/api/weather?lat=${lat}&lon=${lon}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setWeatherData(data.forecast);
+      if (data.forecast && data.forecast.length > 0) {
+        setWeatherData(data.forecast);
+      } else {
+        setWeatherData(await fetchWeatherDirect());
+      }
     } catch {
-      setError('バックエンドに接続できません。backend フォルダで uvicorn main:app --reload を実行してください。');
+      try {
+        setWeatherData(await fetchWeatherDirect());
+      } catch {
+        setError('天気データの取得に失敗しました。しばらく待ってからリロードしてください。');
+      }
     }
     setLoading(false);
   };

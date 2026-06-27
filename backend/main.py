@@ -24,7 +24,11 @@ async def fetch_with_retry(client, url, params=None, headers=None, retries=3):
             continue
         res.raise_for_status()
         return res
-    return res
+    raise httpx.HTTPStatusError(
+        f"Rate limited after {retries} retries",
+        request=res.request,
+        response=res,
+    )
 
 
 @app.get("/api/weather")
