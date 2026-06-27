@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -15,6 +16,17 @@ app.add_middleware(
 NOMINATIM_HEADERS = {"User-Agent": "WeatherDashboard/1.0"}
 
 
+async def fetch_with_retry(client, url, params=None, headers=None, retries=3):
+    for i in range(retries):
+        res = await client.get(url, params=params, headers=headers)
+        if res.status_code == 429:
+            await asyncio.sleep(2 ** i)
+            continue
+        res.raise_for_status()
+        return res
+    return res
+
+
 @app.get("/api/weather")
 async def get_weather(lat: float, lon: float):
     url = "https://api.open-meteo.com/v1/forecast"
@@ -27,13 +39,12 @@ async def get_weather(lat: float, lon: float):
     }
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
+            response = await fetch_with_retry(client, url, params=params)
             data = response.json()
     except Exception as e:
         return JSONResponse(
             status_code=502,
-            content={"error": f"Open-Meteo API error: {str(e)}"},
+            content={"error": str(e)},
         )
 
     hourly = data.get("hourly", {})
